@@ -17,6 +17,54 @@ CLASSES = ["인하대", "숙대1", "숙대2"]  # 기존 BQ(retire) 분반과 동
 EXPERIMENTS = {"rpm": "12주차 · RPM 미니테스트 (6문항)", "heartflower": "13주차 · 하트/꽃 공간 불일치 과제 (20회)"}
 TRIAL_COUNT = {"rpm": 6, "heartflower": 20}
 RPM_ANSWERS = [4, 2, 1, 4, 2, 1]
+RPM_EXPLANATIONS = [
+    ("Q1", 4, "점 5개", "오른쪽으로 한 칸 이동할 때마다 점이 1개씩 늘어나고, 아래로 한 칸 이동할 때도 1개씩 늘어납니다."),
+    ("Q2", 2, "오른쪽 삼각형(▶)", "화살표 방향이 오른쪽 → 아래 → 왼쪽 → 위 순서로 회전합니다."),
+    ("Q3", 1, "채워진 검은 사각형", "채워진 사각형과 속이 빈 사각형이 번갈아 나타납니다."),
+    ("Q4", 4, "오른쪽 아래 칸에 점", "3×3 칸 안의 점이 위쪽 왼쪽부터 오른쪽으로 한 칸씩 이동합니다."),
+    ("Q5", 2, "중간 크기 검은 사각형", "작은 사각형 → 중간 사각형 → 큰 사각형이 순환합니다."),
+    ("Q6", 1, "오른쪽 아래 칸에 속이 빈 점", "마지막 행의 점 위치는 왼쪽 아래 → 아래 가운데 → 오른쪽 아래입니다. 검은색 채움이 아닌 빈 점입니다."),
+]
+
+
+def reaction_time_guide():
+    st.markdown("**반응시간(rt_ms)의 의미**")
+    st.write("**ms(밀리초)**는 1초의 1,000분의 1입니다. **1,000 ms = 1초**이며, **7,474 ms는 약 7.47초**입니다.")
+    st.write("RPM은 각 문제 화면이 표시된 후 보기를 선택하기까지, 하트/꽃은 자극이 표시된 후 좌·우 버튼을 누르기까지의 시간입니다.")
+    st.write("학생별 평균 반응시간은 **각 문항 반응시간을 합한 후 시행 수로 나눈 값**입니다. 교수 화면의 전체 평균은 **제출 완료 학생들의 개인별 평균을 다시 평균**한 값입니다.")
+    st.caption("시간이 짧다고 항상 좋은 결과는 아닙니다. 정답률과 함께 해석해야 하며, 기기·네트워크·조작 방식 등의 차이도 영향을 줄 수 있습니다. 두 실습은 개인의 지능을 판정하는 검사가 아닙니다.")
+
+
+def professor_answer_guide(exp: str, df: pd.DataFrame):
+    """Only on authenticated professor screen; never depend on student-facing reveal."""
+    if exp == "rpm":
+        st.write("**RPM 미니테스트: 6문항, 문항당 6개 보기**")
+        st.dataframe(pd.DataFrame(RPM_EXPLANATIONS, columns=["문항", "정답 번호", "정답 도형", "도형 규칙·해설"]),
+                     use_container_width=True, hide_index=True)
+        st.caption("정답 번호는 보기의 왼쪽 위부터 오른쪽으로 1·2·3, 그 아래가 4·5·6입니다. 작년 GitHub 원본의 정답과 동일합니다.")
+    else:
+        st.write("**하트/꽃 20회: 자극 종류와 나타나는 위치에 따라 정답 방향이 바뀝니다.**")
+        st.dataframe(pd.DataFrame([
+            ("❤️ 하트", "왼쪽", "왼쪽(1)", "나타난 쪽 선택"),
+            ("❤️ 하트", "오른쪽", "오른쪽(2)", "나타난 쪽 선택"),
+            ("🌸 꽃", "왼쪽", "오른쪽(2)", "반대쪽 선택"),
+            ("🌸 꽃", "오른쪽", "왼쪽(1)", "반대쪽 선택"),
+        ], columns=["자극", "출현 위치", "정답", "규칙"]), hide_index=True, use_container_width=True)
+        st.caption("학생마다 하트/꽃과 좌우 위치가 매 시행 무작위이므로 HF_1~HF_20의 정답은 학생별로 다를 수 있습니다.")
+        if not df.empty:
+            names = sorted(df["student_name"].dropna().astype(str).unique().tolist())
+            selected = st.selectbox("학생별 20회 정답·응답 확인", names, key="prof_trial_student")
+            row = df.loc[df["student_name"].astype(str) == selected].iloc[0]
+            records = [{
+                "시행": t["qid"],
+                "자극": "하트" if t.get("stimulus") == "heart" else "꽃",
+                "위치": "왼쪽" if t.get("side") == "L" else "오른쪽",
+                "정답 방향": "왼쪽" if t["correct_index"] == 1 else "오른쪽",
+                "학생 응답": "왼쪽" if t["response"] == 1 else "오른쪽",
+                "정답 여부": "정답" if t["correct"] else "오답",
+                "반응시간(ms)": t["rt_ms"],
+            } for t in row["trials"]]
+            st.dataframe(pd.DataFrame(records), hide_index=True, use_container_width=True)
 T_SESSIONS = "scarcity_lab_sessions"
 T_STUDENTS = "scarcity_lab_students"
 T_RESULTS = "scarcity_lab_results"
@@ -147,12 +195,15 @@ def student_screen():
     name = st.session_state.student_name
     session = find_session(cls)
     st.caption(f"{cls} · {name}")
+    # 학생이 교수가 새 실습을 열었는지 직접 확인할 수 있도록 항상 표시합니다.
+    # 진행 중 새로고침을 누르면 브라우저의 미제출 응답이 초기화될 수 있습니다.
+    with st.container():
+        if st.button("🔄 실습 상태 새로고침", key="student_status_refresh"):
+            st.rerun()
     st.title("🧠 결핍 이론 실습실")
     st.info("본 활동은 인지 능력과 실행 제어의 체험입니다. 개인의 지능을 평가하거나 결핍의 효과를 직접 검증하는 검사는 아닙니다.")
     if not session["is_open"]:
         st.warning("교수님이 실습을 열면 참여할 수 있습니다. '새로고침'을 눌러 확인해 주세요.")
-        if st.button("🔄 새로고침"):
-            st.rerun()
         return
     exp = session["experiment"]
     st.subheader(EXPERIMENTS[exp])
@@ -160,7 +211,8 @@ def student_screen():
     if existing:
         summary_student(existing, bool(session["reveal"]))
     else:
-        st.caption("실습 중에는 페이지를 새로고침하지 마세요. 모든 문항을 마치면 서버에 한 번 저장됩니다.")
+        st.warning("실습 진행 중에는 위의 '실습 상태 새로고침' 버튼을 누르지 마세요. 아직 제출하지 않은 답과 반응시간이 초기화될 수 있습니다.", icon="⚠️")
+        st.caption("모든 문항을 마치면 서버에 한 번 저장됩니다.")
         # A stable component widget key keeps browser trial state across benign reruns.
         submitted = experiment_component(experiment=exp, key=f"lab_{cls}_{name}_{exp}", default=None)
         if submitted:
@@ -208,8 +260,13 @@ def prof_screen():
     view_exp = st.selectbox("집계할 실습", list(EXPERIMENTS), format_func=lambda x: EXPERIMENTS[x],
                             index=list(EXPERIMENTS).index(session["experiment"]))
     df = list_results(cls, view_exp)
+    st.info("**평균 반응시간의 단위:** ms(밀리초). 예를 들어 7,474 ms는 약 7.47초입니다. 아래 '반응시간 설명'에서 계산 방법과 해석상 주의사항을 확인할 수 있습니다.")
+    with st.expander("⏱ 반응시간(ms) 설명 · 계산 방식", expanded=False):
+        reaction_time_guide()
     if df.empty:
-        st.warning("아직 제출한 학생이 없습니다.")
+        st.warning("아직 제출한 학생이 없습니다. 문항별 정답은 아래에서 확인할 수 있습니다.")
+        with st.expander("🔐 교수 전용 문항별 정답·해설 보기", expanded=False):
+            professor_answer_guide(view_exp, df)
         return
     student_rows = db().table(T_STUDENTS).select("student_name").eq("class_name", cls).execute().data
     registered = len(student_rows)
@@ -249,11 +306,8 @@ def prof_screen():
                 st.write("하트/꽃 유형별 통계")
                 st.dataframe(by_stim, use_container_width=True)
     with tab3:
-        st.info("교수 전용 화면입니다. 학생에게 문항별 정답을 보여주려면 위의 '정답·해설 공개' 버튼을 누르세요.")
-        if view_exp == "rpm":
-            st.write("6문항, 각 6개 선택지, 정답: **4 · 2 · 1 · 4 · 2 · 1**")
-        else:
-            st.write("20회, ❤️ 하트는 같은 쪽 · 🌸 꽃은 반대쪽. 시행마다 종류와 좌우 위치를 독립 무작위 배정.")
+        st.info("교수 전용 정답·해설입니다. **학생에게 공개하려면** 화면 상단의 '정답·해설 공개' 버튼을 눌러야 합니다. 이 탭은 교수 화면에서만 표시됩니다.")
+        professor_answer_guide(view_exp, df)
 
 
 def home():
