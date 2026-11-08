@@ -270,6 +270,45 @@ def prof_screen():
     st.info("**평균 반응시간의 단위:** ms(밀리초). 예를 들어 7,474 ms는 약 7.47초입니다. 아래 '반응시간 설명'에서 계산 방법과 해석상 주의사항을 확인할 수 있습니다.")
     with st.expander("⏱ 반응시간(ms) 설명 · 계산 방식", expanded=False):
         reaction_time_guide()
+
+    # 교수 전용 분반 데이터 삭제. 다른 분반/실습 설정은 건드리지 않습니다.
+    # df.empty보다 앞에 두어 제출 결과가 없어도 등록 학생을 정리할 수 있습니다.
+    with st.expander("⚠️ 데이터 관리 · 현재 분반 전체 삭제", expanded=False):
+        st.warning(
+            f"**{cls} 분반**의 RPM·하트/꽃 제출 결과와 학생 등록 명단을 모두 삭제합니다. "
+            "다른 분반의 기록과 현재 실습 선택·열림·정답 공개 설정은 유지됩니다. "
+            "삭제한 데이터는 이 앱에서 복구할 수 없습니다."
+        )
+        st.caption("필요한 결과는 삭제하기 전에 각 실습의 '학생별 결과' 탭에서 CSV로 저장해 주세요.")
+        # 종료된 실습에서만 삭제하도록 해 수업 진행 중의 동시 삭제/재제출을 피합니다.
+        if session["is_open"]:
+            st.info("삭제하려면 먼저 위에서 '학생 실습 허용'을 끄고 '선택한 실습과 열림 상태 적용'을 눌러주세요.")
+        else:
+            confirm_class = st.text_input(
+                f"실수 방지를 위해 분반명 '{cls}'를 정확히 입력하세요.",
+                key=f"delete_class_text_{cls}",
+                placeholder=cls,
+            )
+            confirm = st.checkbox(
+                "두 실습 결과와 학생 등록 명단이 영구 삭제된다는 점을 확인했습니다.",
+                key=f"delete_class_confirm_{cls}",
+            )
+            if st.button(
+                f"🗑️ {cls} 분반 데이터 전체 삭제",
+                type="secondary",
+                disabled=(confirm_class != cls or not confirm),
+                key=f"delete_class_button_{cls}",
+            ):
+                try:
+                    # 두 테이블 모두 class_name으로 제한하여 타 분반을 보호합니다.
+                    db().table(T_RESULTS).delete().eq("class_name", cls).execute()
+                    db().table(T_STUDENTS).delete().eq("class_name", cls).execute()
+                except Exception as exc:
+                    st.error(f"삭제 작업이 완료되지 않았습니다: {exc}. 재시도 전 DB 상태를 확인해 주세요.")
+                else:
+                    st.success(f"{cls} 분반의 제출 결과 및 학생 등록 명단을 삭제했습니다.")
+                    st.rerun()
+
     if df.empty:
         st.warning("아직 제출한 학생이 없습니다. 문항별 정답은 아래에서 확인할 수 있습니다.")
         with st.expander("🔐 교수 전용 문항별 정답·해설 보기", expanded=False):
