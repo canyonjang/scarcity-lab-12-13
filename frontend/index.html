@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+*{box-sizing:border-box}body{font-family:system-ui,-apple-system,"Noto Sans KR",sans-serif;margin:0;color:#243a38;background:transparent}
+.card{border:1px solid #d8e0df;border-radius:14px;background:#fff;padding:14px 12px;min-height:320px}
+.header{font-weight:750;font-size:19px;margin:0 0 12px;color:#386962}.muted{font-size:13px;color:#687574;line-height:1.6}.matrix{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:5px;max-width:405px;margin:12px auto}
+.cell{height:clamp(72px,23vw,124px);display:flex;align-items:center;justify-content:center;font-size:clamp(26px,7vw,40px);background:#fff;border:1.5px solid #d8e0e8;border-radius:8px;overflow:hidden}
+.opts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;max-width:500px;margin:12px auto}.optbox{display:flex;align-items:center;justify-content:center;font-size:28px;min-height:70px;padding:10px 5px;border:2px solid #c8d8d5;border-radius:9px;background:#f8fbfa;color:#1d3331;cursor:pointer;overflow:hidden}
+.optbox:active,.optbox:focus-visible{background:#d8ece5;outline:2px solid #438c7e}.dotgrid{display:grid;grid-template-columns:repeat(3,clamp(12px,4vw,25px));grid-auto-rows:clamp(12px,4vw,25px);gap:3px}.dot{width:100%;height:100%;border-radius:50%;background:#111}.dot.hollow{background:transparent;border:2px solid #111}.sq{width:clamp(26px,8vw,36px);height:clamp(26px,8vw,36px);background:#111}.sq.hollow{background:transparent;border:3px solid #111}.sq.sm{width:22px;height:22px}.sq.md{width:30px;height:30px}.sq.lg{width:38px;height:38px}
+.lane{display:flex;justify-content:space-between;align-items:center;border:2px dashed #bac9c5;border-radius:12px;margin:22px auto;padding:18px 10px;max-width:440px}.slot{flex:1;text-align:center;min-height:100px;display:flex;align-items:center;justify-content:center;font-size:64px}
+.buttons{display:flex;gap:12px;justify-content:center}.buttons button{font-size:18px;font-weight:700;border:1.5px solid #5d988b;border-radius:10px;background:#edf6f2;padding:14px 20px;min-width:120px;cursor:pointer;color:#1d5549}.buttons button:active{background:#bdddd0}
+button:disabled{opacity:.55;cursor:default}.small{font-size:12px;color:#76837d}.center{text-align:center}.error{color:#a82020}.complete{background:#e9f5ee;border-radius:10px;padding:15px;text-align:center}.optbox .dotgrid{transform:scale(.88)}
+@media(max-width:420px){.card{padding:10px 6px}.matrix{gap:3px}.slot{font-size:55px}.buttons button{min-width:100px}.optbox{min-height:65px}}
+</style></head><body><main id="app" class="card"><p class="muted">실습을 준비하고 있습니다...</p></main>
+<script>
+(function(){
+const app=document.getElementById('app');
+const post=(type,other={})=>window.parent.postMessage({isStreamlitMessage:true,type,...other},'*');
+const resize=()=>post('streamlit:setFrameHeight',{height:Math.max(340,document.body.scrollHeight+18)});
+const submit=value=>post('streamlit:setComponentValue',{value,dataType:'json'});
+const once=(btn,callback)=>{btn.addEventListener('click',()=>{btn.disabled=true;callback();},{once:true})};
+let experiment=null;let active=false;let idx=0;let results=[];let finished=false;
+const now=()=>new Date().toISOString();
+  const tri = { up:'\u25B2', right:'\u25B6', down:'\u25BC', left:'\u25C0' }; // ▲ ▶ ▼ ◀
+  const sqSolid = '<div class="sq"></div>';
+  const sqHollow = '<div class="sq hollow"></div>';
+
+  function dotGrid(index, hollow=false){
+    let html = '<div class="dotgrid">';
+    for(let i=0;i<9;i++){
+      if(i===index){ html += `<div class="dot ${hollow?'hollow':''}"></div>`; }
+      else { html += '<div></div>'; }
+    }
+    html+='</div>';
+    return html;
+  }
+  function nDots(n){
+    let out = '<div style="display:flex; gap:8px; flex-wrap:wrap; max-width:120px; justify-content:center;">';
+    for(let i=0;i<n;i++) out += '<div class="dot"></div>';
+    out += '</div>'; return out;
+  }
+  function renderMatrix(cells){
+    let html = '<div class="matrix">';
+    for(let i=0;i<9;i++){
+      html += `<div class="cell">${cells[i]??'<span style=\"color:#bbb\">?</span>'}</div>`;
+    }
+    html += '</div>';
+    return html;
+  }
+
+
+  const ITEMS = [
+    { id:'Q1',
+      stem: renderMatrix([
+        nDots(1), nDots(2), nDots(3),
+        nDots(2), nDots(3), nDots(4),
+        nDots(3), nDots(4), null
+      ]),
+      options:[ nDots(2), nDots(3), nDots(4), nDots(5), nDots(6), nDots(7) ],
+      correct: 4 // 정답 인덱스 (1~6 기준)
+    },
+    { id:'Q2',
+      stem: renderMatrix([
+        tri.right, tri.down, tri.left,
+        tri.down, tri.left, tri.up,
+        tri.left, tri.up, null
+      ]),
+      options:[ tri.up, tri.right, tri.down, tri.left, tri.up+tri.right, '◻' ],
+      correct: 2 // ▶
+    },
+    { id:'Q3',
+      stem: renderMatrix([
+        sqSolid, sqHollow, sqSolid,
+        sqHollow, sqSolid, sqHollow,
+        sqSolid, sqHollow, null
+      ]),
+      options:[ sqSolid, sqHollow, '<div class="sq sm"></div>', '<div class="sq md"></div>', '▲', '●' ],
+      correct: 1 // 채워진 사각형 (윗줄 왼쪽)
+    },
+    { id:'Q4',
+      stem: renderMatrix([
+        dotGrid(0), dotGrid(1), dotGrid(2),
+        dotGrid(3), dotGrid(4), dotGrid(5),
+        dotGrid(6), dotGrid(7), null
+      ]),
+      options:[ dotGrid(0), dotGrid(2), dotGrid(6), dotGrid(8), dotGrid(7), dotGrid(4) ],
+      correct: 4 // index 8 위치가 정답
+    },
+    { id:'Q5',
+      stem: renderMatrix([
+        '<div class="sq sm"></div>', '<div class="sq md"></div>', '<div class="sq lg"></div>',
+        '<div class="sq md"></div>', '<div class="sq lg"></div>', '<div class="sq sm"></div>',
+        '<div class="sq lg"></div>', '<div class="sq sm"></div>', null
+      ]),
+      options:[ '<div class="sq sm"></div>', '<div class="sq md"></div>', '<div class="sq lg"></div>', sqHollow, tri.up, '◯' ],
+      correct: 2 // 중간 크기 사각형(윗줄 가운데)
+    },
+    { id:'Q6',
+      stem: renderMatrix([
+        dotGrid(0, true), dotGrid(1, true), dotGrid(2, true),
+        dotGrid(4, true), dotGrid(5, true), dotGrid(3, true),
+        dotGrid(6, true), dotGrid(7, true), null
+      ]),
+      options:[ dotGrid(8, true), dotGrid(0), dotGrid(8), dotGrid(4, true), dotGrid(2, true), dotGrid(7, true) ],
+      correct: 1 // hollow dot 마지막 위치
+    }
+  ];
+
+
+function render(markup){app.innerHTML=markup;resize();}
+function startRPM(){
+ const item=ITEMS[idx];
+ render(`<h2 class="header">RPM 미니테스트 · ${idx+1} / 6</h2><p class="muted center">3×3 행렬의 오른쪽 아래 빈칸에 들어갈 도형을 선택하세요.</p>${item.stem}<div class="opts">${item.options.map((v,i)=>`<button class="optbox" aria-label="${i+1}번 선택지" data-index="${i+1}">${v}</button>`).join('')}</div>`);
+ const t0=performance.now();
+ for (const btn of document.querySelectorAll('.optbox')) once(btn,()=>{
+   const response=Number(btn.dataset.index);
+   results.push({qid:item.id,response,correct_index:item.correct,correct:response===item.correct,rt_ms:Math.round(performance.now()-t0),timestamp:now()});
+   idx++; if(idx<ITEMS.length)startRPM();else done();
+ });
+}
+function startHF(){
+ const type=Math.random()<.5?'heart':'flower';const side=Math.random()<.5?'L':'R';
+ const correctSide=type==='heart'?side:(side==='L'?'R':'L');
+ const correct=correctSide==='L'?1:2;
+ const symbol=type==='heart'?'❤️':'🌸';
+ render(`<h2 class="header">하트/꽃 · ${idx+1} / 20</h2><p class="muted center">❤️ 같은 쪽 · 🌸 반대쪽</p><div class="lane"><div class="slot">${side==='L'?symbol:''}</div><div class="slot">${side==='R'?symbol:''}</div></div><div class="buttons"><button id="left">왼쪽</button><button id="right">오른쪽</button></div>`);
+ const t0=performance.now();
+ let selected=false;
+ [1,2].forEach((response,i)=>document.getElementById(i?'right':'left').addEventListener('click',()=>{
+  if(selected)return;selected=true;
+  results.push({qid:`HF_${idx+1}`,response,correct_index:correct,correct:response===correct,rt_ms:Math.round(performance.now()-t0),timestamp:now(),stimulus:type,side});
+  idx++;if(idx<20)startHF();else done();
+ }));
+}
+function done(){
+ if(finished)return;finished=true;
+ const total=results.length;const hits=results.filter(r=>r.correct).length;
+ const avg=Math.round(results.reduce((acc,r)=>acc+r.rt_ms,0)/total);
+ render(`<h2 class="header">측정 완료</h2><p class="muted">${total}회 응답을 마쳤습니다. 결과를 안전하게 저장하고 있습니다.</p><div class="complete"><strong>${hits} / ${total} 정답 (${Math.round(hits*100/total)}%)</strong><p>평균 반응시간: ${avg}ms</p></div><p class="muted center">아래에 저장 완료 메시지가 나타날 때까지 이 페이지를 유지해 주세요.</p>`);
+ submit({experiment,results});
+}
+function begin(){idx=0;results=[];finished=false;
+ render(`<h2 class="header">${experiment==='rpm'?'RPM 미니테스트 (6문항)':'하트/꽃 공간 불일치 과제 (20회)'}</h2><p class="muted">${experiment==='rpm'?'3×3 도형 행렬의 빈칸을 채우는 가장 알맞은 도형을 6개 보기 중 선택합니다. 정답·오답은 마지막에 집계됩니다.':'화면 왼쪽 또는 오른쪽에 나타난 ❤️ 하트는 같은 쪽을, 🌸 꽃은 반대쪽을 누르세요. 빠르고 정확하게 응답하세요.'}</p><div class="buttons"><button id="go">시작</button></div>`);
+ once(document.getElementById('go'),()=>{if(experiment==='rpm')startRPM();else startHF();});
+}
+window.addEventListener('message',e=>{
+ if(e.data?.type!=='streamlit:render')return;
+ const exp=e.data.args?.experiment;
+ if(!['rpm','heartflower'].includes(exp))return;
+ if(!active){active=true;experiment=exp;begin()}
+});
+post('streamlit:componentReady',{apiVersion:1});resize();
+new ResizeObserver(resize).observe(app);
+})();
+</script></body></html>
