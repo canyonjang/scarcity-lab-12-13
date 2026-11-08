@@ -260,6 +260,13 @@ def prof_screen():
     view_exp = st.selectbox("집계할 실습", list(EXPERIMENTS), format_func=lambda x: EXPERIMENTS[x],
                             index=list(EXPERIMENTS).index(session["experiment"]))
     df = list_results(cls, view_exp)
+    if view_exp == "rpm":
+        st.info(
+            "**RPM(Raven’s Progressive Matrices, 레이븐 누진행렬검사)**는 "
+            "도형의 배열에서 규칙을 찾아 빈칸에 들어갈 도형을 고르는 검사입니다. "
+            "주로 **유동성 지능**(새로운 문제에서 규칙을 발견하고 추론하는 능력)을 살펴보는 데 사용됩니다. "
+            "이번 **6문항 미니테스트는 수업용 체험**이므로, 점수만으로 개인의 IQ나 지능 수준을 판단할 수 없습니다."
+        )
     st.info("**평균 반응시간의 단위:** ms(밀리초). 예를 들어 7,474 ms는 약 7.47초입니다. 아래 '반응시간 설명'에서 계산 방법과 해석상 주의사항을 확인할 수 있습니다.")
     with st.expander("⏱ 반응시간(ms) 설명 · 계산 방식", expanded=False):
         reaction_time_guide()
